@@ -1,0 +1,381 @@
+version := "17"; //revision number
+
+print "input q; order of the Galois field to work over";
+readi q;
+print "input n; dimension of columnspace";
+readi n;
+print "input m; dimension of rowspace";
+readi m;
+
+print "complete search: c";
+print "random sample: r";
+print "generate anticodes only: a";
+
+modes := {"c","r","a"};
+mode := "";
+
+while true do;
+	read mode;
+	if mode in modes then;
+		break;
+	end if;
+end while;
+
+print "do you wish to log the output to ";
+print "a file **instead** of to the terminal?: y/n"
+
+querys := {"y","n"};
+
+while true do;
+	read savequery;
+	if savequery in querys then;
+		break;
+	end if;
+end while;
+
+// We store the number of random spaces to be checked here
+randnom := 0;
+
+if mode eq "r" then;
+	print "how many random codes to check?";
+	readi randnom;
+end if;
+
+// This section, if the user specifies that result should be logged,
+// writes the standard output of Magma to a file, 
+// ***instead of*** to the terminal
+// Most of this code is just automating file name creation
+
+if savequery eq "y" then
+	// this first line runs a linux command
+	// it might need to be replaced
+	date := Split(Pipe("date +%F_%H-%M", ""),"\n");
+	filename := date[1] cat "_v-" cat version cat mode cat "_q" cat IntegerToString(q) cat "n" cat IntegerToString(n)  cat "m" cat IntegerToString(m); 
+	outputfolder := "v"cat version cat "outputs/";
+	outputfolder cat filename;
+	SetOutputFile(outputfolder cat filename);
+end if;
+
+// a simple function to convert integers into
+// printable strings
+ItoS := function(a);
+	return IntegerToString(a);
+end function;
+
+// Defining the Galois Field
+F_q := GF(q); 
+
+// Column and Row Spaces
+V:=[VectorSpace(F_q,n),VectorSpace(F_q,m)]; 
+
+// Matrix space represented as a n*m vectorspace
+// This is what is used in calulations, as it is quicker than
+// using matrices. It also allows us to use magma's inbuilt
+// Coding theory functions, which work on vector spaces,
+// not matrices
+T:= TensorProduct(V[1],V[2]); 
+
+// Matrix space represented as n time m matrix
+KMat := KMatrixSpace(F_q,n,m);
+
+// This function generates the family of closure type
+// anticodes
+GenerateClosureTypeAnticodes := function();
+	
+	// These generate the unique, one dimensional subspaces 
+	// of the row and column space respectively
+	SC := {sub<V[1]|v>:v in V[1]};
+	SR := {sub<V[2]|v>:v in V[2]};
+	
+	// SubC is the set of basis for all subspaces of the columnspace
+	time SubC := {&+[c[i]: i in [1..n]]:c in CartesianPower(SC,n)};
+	
+	// If we have a square matrix, 
+	// the rowspace and columnspace are the same
+	// so we don't need to generate the set of all possible basis again
+	if n eq m then	
+		SubR := SubC;	
+	else
+		time SubR := {&+[c[i]: i in [1..m]]:c in CartesianPower(SR,m)};
+	end if;	
+	
+	// Finally we generate and return the family of closure type anticodes
+	A := {TensorProduct(u,v):u in SubC, v in SubR};
+	return A;
+end function;
+
+// This generate the family of the closure-type
+// dual anticodes by generating the dual code of each
+// closure type anticode in the family 
+GenerateClosureTypeDualAnticodes := function(A)
+	Adual := {sub<T|Dual(LinearCode(a))>:a in A};
+	return Adual;
+end function;
+
+// Here we run the functions to generate the anticodes
+// the function "time" outputs how long a function took to run
+time A:= GenerateClosureTypeAnticodes();
+time ADual := GenerateClosureTypeDualAnticodes(A);
+
+// This function is a (limited) implementation of the
+// q-binomial coefficient, when a >=0
+GaussianBinomialCoefficient := function(q,a,b)
+	if b lt 0 then
+		return 0;
+	end if;
+	product :=1;
+	for i in [1..b] do 
+		product := product * ((q^((a-i)+1)-1)/(q^(i) -1));
+	end for;
+	return product;
+end function;
+
+// This function takes the intersection of 
+// a code with a set of anticodes
+dimIntersect:= function(j,C,A)
+	return {a: a in A | Dimension(a meet C) ge j};
+end function;
+
+// This function generates the dual code of a code
+// and converts it into a nm-vector space,
+// which is the data type we are using to store
+// matrix codes (it is faster to work with
+// tensors than vectors.)
+dualCode := function(C)
+	return sub<T|Basis(Dual(LinearCode(C)))>;
+end function;
+
+// Depending on whether A or ADual is provided for A, this returns the 
+// the jth generalised tensor weight or the jth generalised dual tensor
+// weight, respectively, of C. It also returns the anticode which 
+// achieved the minimum.
+// In place of returning infinity as the minimum of an empty set,
+// the function returns 5000*n*m. This prevents the code from erroring
+// in certain circumstance (i.e. passing in j > k).
+GeneralizedWeight := function(j,C,A)
+	if j gt Dimension(C) then;
+		return 5000*n*m, [[]];
+	end if;
+	B := [a:a in dimIntersect(j,C,A)];
+	C, c:= Min([Dimension(b): b in B]);
+	return C,B[c];
+end function;
+
+// This generates the jth generalised tensor weight of the
+// dual code $s_j\dual$
+GeneralizedWeightofDualCode := function(j,C,ADual)
+	return GeneralizedWeight(j,sub<T|Basis(Dual(LinearCode(C)))>,ADual);
+end function;
+
+// This is the function phi defined in the report
+Phi := function(C,A);
+	return Max({Dimension(a): a in A | a + C ne T} join {-5000*n*m});
+end function;
+
+// This function uses phi to generate s_1\dual
+GeneralizedDualWeightofDualCode := function(C,A)
+	return n*m - Phi(C,A);
+end function;
+
+// This function converts a nm-vector into the matrix
+// it represents
+Matrixify :=function(c);
+	return (KMat!Eltseq(c));
+end function;
+
+// This function converts a nm-vectorspace into the n by m matrix
+// space it represents
+MatrixifySpace := function(C);
+	return sub<KMat|[Matrixify(x):x in Basis(C)]>;	
+end function;
+
+// This function finds the lowest value of j
+// for which C is j-BMD\cl. If C is never j-BMD\cl
+// it returns -1. It also returns tj and s1
+ineqScan := function(C,A)
+	for i in [1..Dimension(C)] do
+		tj:=GeneralizedWeight(i,C,A);
+		s1:=GeneralizedDualWeightofDualCode(C,A);
+		ineq := n*m - (tj+s1);
+		if ineq lt 0 then
+			return i, tj, s1;
+			break;
+		end if;
+	end for;
+	return -1,-1,-1;
+end function;
+
+// This function prints data to the terminal so it can be
+// easily searched using the linux command "grep"
+RTPrint := function(k,ineq,t,s,kd,ineqd,td,sd,t1,td1)
+	print "dimC=" cat ItoS(k) cat 
+	",t1=" cat ItoS(t1) cat 
+	",j="cat ItoS(ineq) cat
+	",t="cat ItoS(t)cat
+	",s="cat ItoS(s)  cat 
+	",dimCd=" cat ItoS(kd) cat
+	",td1=" cat ItoS(td1) cat 
+	",jd=" cat ItoS(ineqd)cat 
+	",td=" cat ItoS(td) cat 
+	",sd=" cat ItoS(sd);
+	return 0;
+end function;
+
+// This function genererates all subspaces of the matrix space,
+// considers them as codes, and calculates various parameters and
+// invariants of the codes, which it outputs to the terminal
+// along with the basis vectors.
+
+// This is a recursive function, that starts with a list with only the 
+// empty vector space, and it generates every vector subspace,
+
+// inlen is the largest number of basis elements in an entry in list
+// maxlen is the number of basis elements in the basis that will cause
+// the loop to stop. This should be set to n*m/2 as the program checks 
+// dual code of each code as well.
+LiveResultSearch:= function(inlen,maxlen,list)
+	// tmplist stores the basis of vector subspaces of dimension inlen+1
+	// being generated in this recursive step.
+	// This is appended to list at the end of the step.
+	tmplist := [];
+	// tmplistDual stores the dual codes to each code in tmplist. 
+	// This is appended to list at the end of the step.
+	tmplistDual := [];
+	// tmpsublist stores the vector subspace object, so that it doesn't 
+	// need to be recreated multiple times. It is forgotten at the end
+	// of the recursive step
+	tmpsublist := [];
+	
+	k:= inlen +1;
+	kd:= n*m-k;
+	
+	// We first select a basis, x, of dimension inlen from our input list
+	for i in {x: x in list | #x eq inlen} do
+		// this if statement terminates the recursive step if all vector
+		// subspaces have been created
+		if #tmpsublist eq GaussianBinomialCoefficient(q,n*m,k) then
+			break;
+		end if;
+		// otherwise
+		
+		// We then try appending every vector not already in the subspace
+		// to the basis. This new basis is called tmpgen. The subspace
+		// is called tmpsub
+		for j in {t: t in T | t notin sub<T|i>} do
+			tmpgen := Append(i,j);
+			tmpsub := sub<T|tmpgen>;
+			
+			// This next loop check whether we have already generated this
+			// subspace. It does so by checking that, for all subspaces, k, in
+			// tmpsublist, all the basis elements of tmpsub are not in any k 
+			testbool := true;
+			for k in tmpsublist do	
+				if forall{x: x in tmpgen | x in k} then
+					testbool := false;
+					break;
+				end if;
+			end for;
+
+			// If the vector subspace is indeed unique, we add it to
+			// tmpsublist, and add its basis to tmplist. We then 
+			// proceed to calculate, and print, both its invariants,
+			// and the invariants of its dual code tmpsubdual, 
+			// with basis tmpgendual.
+			if testbool then
+				tmplist := Append(tmplist, tmpgen);
+				tmpsublist := Append(tmpsublist, tmpsub);
+				ineq, t, s:= ineqScan(tmpsub,A);
+				tmpgen;
+				
+				tmpsubdual := dualCode(tmpsub);
+				tmpgendual := [T!x: x in Basis(tmpsubdual)];
+				ineqd, td, sd:= ineqScan(tmpsubdual,A);
+				
+				t1 := GeneralizedWeight(1,tmpsub,A);
+				td1 := GeneralizedWeight(1,tmpsubdual,A);
+
+				_:=RTPrint(k,ineq,t,s,kd,ineqd,td,sd,t1,td1);
+				tmpgendual;
+				
+				// This section here deals with the dual code.
+				// there are a few cases. If the dimension of the 
+				// code is equal the dimension of its dual,
+				// then tmpsub may be its own dual. If this is the case
+				// we do **not** want to print its parameters, as that
+				// will result in the space being double counted. 
+				// Otherwise, we do print its parameters and basis
+				if 2*k eq n*m then;
+					if tmpsubdual ne tmpsub then
+						tmplist := Append(tmplist, tmpgendual);
+						tmpsublist := Append(tmpsublist, tmpsubdual);
+						tmpgendual;
+					else;
+						print "self-dual";
+						print "";
+					end if;
+				else;
+					tmplistDual := Append(tmplistDual, tmpgendual);
+					tmpgendual;
+					_:=RTPrint(kd,ineqd,td,sd,kineq,t,s,td1,t1);
+				end if;
+				
+				print "-----";
+			end if;		
+
+		end for;
+	end for;
+	
+	// This section here calls the function recursively
+	// We added the basis elements of the spaces we check to list2
+	// and pass list2 to the recursive function $$.
+	// We also check whether we are done, so that the recursion has a
+	// stopping point.
+	list2 := list cat tmplist cat tmplistDual;
+	if inlen+1 lt maxlen then
+		return $$(inlen+1,maxlen,list2);
+	else
+		return list2;
+	end if;
+end function;
+
+// This function checks a user determined number (randn) of randomly 
+// chosen codes (with no memory, so codes may be chosen multiple times)
+// as well as their dual code and prints information about the 
+// invariants and parameters of these codes
+// The function returns two lists;
+// ineqlist stores the properties ineq, t, s,ineqd, td, sd
+// spacelist stores the generators of each subspace
+// The indices of both lists correspond to each other
+RandomTest := function(randn);
+	count := 0;
+	ineqlist := [];
+	spacelist := [];
+	while count lt randn do
+		generators := [];
+		uprand := random{x:x in [1..n*m]};
+		for i in [1..uprand] do
+			generators := Append(generators, Random(T));
+		end for;
+		space := sub<T|generators>;
+		ineq, t, s:=ineqScan(space,A);
+		t1 := GeneralizedWeight(1,space,A);
+		td1 := GeneralizedWeight(1,dualCode(space),A);
+		ineqd, td, sd:=ineqScan(dualCode(space),A);
+		Basis(space);
+		k:=Dimension(space);
+		kd:= Dimension(dualCode(space));
+		_:= RTPrint(k,ineq,t,s,kd,ineqd,td,sd,t1,td1);
+		ineqlist:= Append(ineqlist,[ineq, t, s,ineqd, td, sd]);
+		spacelist:=Append(spacelist,generators);
+		count := count + 1;
+	end while;
+	return ineqlist, spacelist;
+end function;
+
+// This code at the end runs whichever mode the user has specified
+if mode eq "c" then ;
+	time Xc:=LiveResultSearch(0,(n*m)/2,[[]]);
+end if;
+if mode eq "r" then ;
+	time Xr,Yr := RandomTest(randnom);
+end if;
