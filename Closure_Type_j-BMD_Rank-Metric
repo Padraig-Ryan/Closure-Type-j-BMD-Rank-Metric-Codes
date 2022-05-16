@@ -21,8 +21,16 @@ while true do;
 	end if;
 end while;
 
+// We store the number of random spaces to be checked here
+randnom := 0;
+
+if mode eq "r" then;
+	print "how many random codes to check?";
+	readi randnom;
+end if;
+
 print "do you wish to log the output to ";
-print "a file **instead** of to the terminal?: y/n"
+print "a file **instead** of to the terminal?: y/n";
 
 querys := {"y","n"};
 
@@ -32,14 +40,6 @@ while true do;
 		break;
 	end if;
 end while;
-
-// We store the number of random spaces to be checked here
-randnom := 0;
-
-if mode eq "r" then;
-	print "how many random codes to check?";
-	readi randnom;
-end if;
 
 // This section, if the user specifies that result should be logged,
 // writes the standard output of Magma to a file, 
@@ -51,7 +51,7 @@ if savequery eq "y" then
 	// it might need to be replaced
 	date := Split(Pipe("date +%F_%H-%M", ""),"\n");
 	filename := date[1] cat "_v-" cat version cat mode cat "_q" cat IntegerToString(q) cat "n" cat IntegerToString(n)  cat "m" cat IntegerToString(m); 
-	outputfolder := "v"cat version cat "outputs/";
+	outputfolder := "closure-type_j-BMD_outputs/";
 	outputfolder cat filename;
 	SetOutputFile(outputfolder cat filename);
 end if;
@@ -316,7 +316,7 @@ LiveResultSearch:= function(inlen,maxlen,list)
 				else;
 					tmplistDual := Append(tmplistDual, tmpgendual);
 					tmpgendual;
-					_:=RTPrint(kd,ineqd,td,sd,kineq,t,s,td1,t1);
+					_:=RTPrint(kd,ineqd,td,sd,k,ineq,t,s,td1,t1);
 				end if;
 				
 				print "-----";
