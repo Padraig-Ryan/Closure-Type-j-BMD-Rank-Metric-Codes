@@ -1,1 +1,1 @@
-# Closure Type $j$-BMD Rank Metric Codes
+# Closure Type j-BMD Rank Metric Codes
