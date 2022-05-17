@@ -106,7 +106,7 @@ end function;
 
 // This generate the family of the closure-type
 // dual anticodes by generating the dual code of each
-// closure type anticode in the family 
+// closure type anticode, A 
 GenerateClosureTypeDualAnticodes := function(A)
 	Adual := {sub<T|Dual(LinearCode(a))>:a in A};
 	return Adual;
@@ -130,8 +130,8 @@ GaussianBinomialCoefficient := function(q,a,b)
 	return product;
 end function;
 
-// This function takes the intersection of 
-// a code with a set of anticodes
+// This function returns the set of intersection of 
+// a code C with a set of anticodes A, where the intersect has dim >=j
 dimIntersect:= function(j,C,A)
 	return {a: a in A | Dimension(a meet C) ge j};
 end function;
